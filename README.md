@@ -16,28 +16,52 @@ go get github.com/xxjwxc/fastgpt
 import "github.com/xxjwxc/fastgpt"
 
 // 初始化FastGPT客户端
-fgpt := fastgpt.NewFastGPT("https://api.fastgpt.cn", "your-api-key")
+fgpt := fastgpt.NewFastGPT("https://cloud.fastgpt.cn", "your-api-key")
+
+// 开启debug模式（可选）
+fgpt.SetDebug(true)
 ```
 
 ## 应用接口
 
-### 获取应用统计数据
+### 获取累积运行结果
 
 ```go
 import "github.com/xxjwxc/fastgpt/model"
 
 // 构建请求
-statsReq := &model.AppStatsRequest{
-    StartTime: 1758585600000, // 开始时间戳
-    EndTime:   1758672000000, // 结束时间戳
+totalDataReq := &model.AppTotalDataRequest{
+    AppId: "your-app-id", // 应用ID
 }
 
 // 发送请求
-statsResp, err := fgpt.App.GetStats(statsReq)
+totalDataResp, err := fgpt.App.GetTotalData(totalDataReq)
 if err != nil {
-    log.Printf("获取应用统计数据失败: %v\n", err)
+    log.Printf("获取累积运行结果失败: %v\n", err)
 } else {
-    fmt.Printf("应用统计数据获取成功，用户数据数量: %d\n", len(statsResp.Data.UserData))
+    fmt.Printf("累积运行结果获取成功，总对话数: %d\n", totalDataResp.TotalChat)
+}
+```
+
+### 获取应用日志看板
+
+```go
+// 构建请求
+chartDataReq := &model.AppChartDataRequest{
+    AppId:       "your-app-id", // 应用ID
+    DateStart:   "2025-09-19T16:00:00.000Z", // 开始时间
+    DateEnd:     "2025-09-27T15:59:59.999Z", // 结束时间
+    UserTimespan: "day", // 用户统计时间粒度
+    ChatTimespan: "day", // 对话统计时间粒度
+    AppTimespan:  "day", // 应用统计时间粒度
+}
+
+// 发送请求
+chartDataResp, err := fgpt.App.GetChartData(chartDataReq)
+if err != nil {
+    log.Printf("获取应用日志看板失败: %v\n", err)
+} else {
+    fmt.Printf("应用日志看板获取成功，用户数据数量: %d\n", len(chartDataResp.UserData))
 }
 ```
 
@@ -46,6 +70,8 @@ if err != nil {
 ### 发送对话请求
 
 ```go
+import "github.com/xxjwxc/fastgpt/model"
+
 // 构建对话请求
 chatReq := &model.ChatRequest{
     AppId: "your-app-id",
@@ -84,17 +110,55 @@ if err != nil {
 }
 ```
 
+### 获取应用历史记录
+
+```go
+// 构建请求
+historiesReq := &model.GetHistoriesRequest{
+    AppId:    "your-app-id",
+    Offset:   0,
+    PageSize: 10,
+    Source:   "api",
+}
+
+// 发送请求
+historiesResp, err := fgpt.Chat.GetHistories(historiesReq)
+if err != nil {
+    log.Printf("获取应用历史记录失败: %v\n", err)
+} else {
+    fmt.Printf("获取应用历史记录成功，总数: %d\n", historiesResp.Total)
+}
+```
+
 ## 知识库接口
+
+### 创建知识库
+
+```go
+// 构建创建知识库请求
+datasetReq := &model.DatasetCreateRequest{
+    Name:  "我的知识库",
+    Type:  "dataset",
+    Intro: "这是一个测试知识库",
+}
+
+// 发送请求
+datasetId, err := fgpt.Dataset.CreateDataset(datasetReq)
+if err != nil {
+    log.Printf("创建知识库失败: %v\n", err)
+} else {
+    fmt.Printf("知识库创建成功，ID: %s\n", datasetId)
+}
+```
 
 ### 创建外部文件集合
 
 ```go
 // 构建创建外部文件集合请求
-externalReq := &model.ExternalFileCollectionCreateRequest{
+externalReq := &model.CollectionCreateExternalFileRequest{
     ExternalFileUrl: "https://example.com/file.pdf", // 外部文件URL
     ExternalFileId:  "123456", // 外部文件ID
     Filename:        "示例文件.pdf", // 自定义文件名
-    CreateTime:      "2025-01-01T00:00:00.000Z", // 创建时间
     DatasetId:       "your-dataset-id", // 知识库ID
     TrainingType:    "chunk", // 数据处理方式：chunk-按文本长度分割; qa-问答对提取
     ChunkSize:       1500, // 分块大小
@@ -114,15 +178,13 @@ if err != nil {
 
 ```go
 // 构建批量添加数据请求
-batchReq := &model.DatasetDataBatchRequest{
-    DatasetId:    "your-dataset-id",
+pushReq := &model.DataPushRequest{
     CollectionId: "your-collection-id",
+    TrainingType: "chunk",
     Data: []model.DatasetData{
         {
-            TeamId:       "your-team-id",
-            TmbId:        "your-tmb-id",
-            Q:            "主要数据",
-            A:            "辅助数据",
+            Q: "主要数据",
+            A: "辅助数据",
             Indexes: []model.Index{
                 {
                     Type: "custom",
@@ -135,11 +197,11 @@ batchReq := &model.DatasetDataBatchRequest{
 }
 
 // 发送请求
-err := fgpt.Dataset.BatchAddData(batchReq)
+pushResp, err := fgpt.Dataset.PushData(pushReq)
 if err != nil {
     log.Printf("批量添加数据失败: %v\n", err)
 } else {
-    fmt.Println("批量添加数据成功")
+    fmt.Printf("批量添加数据成功，插入数量: %d\n", pushResp.InsertLen)
 }
 ```
 
@@ -148,9 +210,9 @@ if err != nil {
 ```go
 // 构建请求
 listReq := &model.CollectionListRequest{
-    DatasetId: "your-dataset-id",
-    Page:      1,
-    PageSize:  10,
+    DatasetId:  "your-dataset-id",
+    Offset:     0,
+    PageSize:   10,
 }
 
 // 发送请求
@@ -159,6 +221,24 @@ if err != nil {
     log.Printf("获取集合列表失败: %v\n", err)
 } else {
     fmt.Printf("获取集合列表成功，总数: %d\n", listResp.Total)
+}
+```
+
+### 创建训练订单
+
+```go
+// 构建创建训练订单请求
+trainReq := &model.DatasetTrainOrderRequest{
+    DatasetId: "your-dataset-id",
+    Name:      "文档训练-fastgpt.docx", // 可选，自定义订单名称
+}
+
+// 发送请求
+trainOrderId, err := fgpt.Dataset.CreateTrainOrder(trainReq)
+if err != nil {
+    log.Printf("创建训练订单失败: %v\n", err)
+} else {
+    fmt.Printf("训练订单创建成功，ID: %s\n", trainOrderId)
 }
 ```
 
